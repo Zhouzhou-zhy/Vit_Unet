@@ -1,6 +1,6 @@
 """ Full assembly of the parts to form the complete network """
 
-from .unet_parts import *
+from unet_parts import *
 
 
 class UNet(nn.Module):
@@ -11,6 +11,7 @@ class UNet(nn.Module):
         self.bilinear = bilinear
 
         self.inc = (DoubleConv(n_channels, 64))
+       
         self.down1 = (Down(64, 128))
         self.down2 = (Down(128, 256))
         self.down3 = (Down(256, 512))
@@ -24,6 +25,7 @@ class UNet(nn.Module):
 
     def forward(self, x):
         x1 = self.inc(x)
+        print(x1.shape)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
@@ -46,3 +48,10 @@ class UNet(nn.Module):
         self.up3 = torch.utils.checkpoint(self.up3)
         self.up4 = torch.utils.checkpoint(self.up4)
         self.outc = torch.utils.checkpoint(self.outc)
+if __name__ == "__main__":
+    x = torch.randn(1, 3, 256, 256) 
+    model=UNet(3,2)
+    output=model(x)
+    print(output.shape)
+    
+    

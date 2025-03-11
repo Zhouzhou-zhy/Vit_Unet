@@ -12,15 +12,19 @@ from pathlib import Path
 from torch import optim
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
-
+from vit_unet import Vit_Unet
 import wandb
 from evaluate import evaluate
-from unet import UNet
+
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
-dir_img = Path('./data/imgs/')
-dir_mask = Path('./data/masks/')
+train_img = Path('/home/zhy/zhy-cv/seg_test/The_cropped_image_tiles_and_raster_labels/train_test/')
+train_mask = Path('/home/zhy/zhy-cv/seg_test/The_cropped_image_tiles_and_raster_labels/train_mark/')
+val_img= Path('/home/zhy/zhy-cv/seg_test/The_cropped_image_tiles_and_raster_labels/val_test/')
+val_mask= Path('/home/zhy/zhy-cv/seg_test/The_cropped_image_tiles_and_raster_labels/val_mark/')
 dir_checkpoint = Path('./checkpoints/')
 
 
@@ -38,16 +42,19 @@ def train_model(
         momentum: float = 0.999,
         gradient_clipping: float = 1.0,
 ):
+
     # 1. Create dataset
     try:
-        dataset = CarvanaDataset(dir_img, dir_mask, img_scale)
+        train_set= CarvanaDataset(train_img, train_mask, img_scale)
+        val_set =  CarvanaDataset(val_img, val_mask, img_scale)
     except (AssertionError, RuntimeError, IndexError):
-        dataset = BasicDataset(dir_img, dir_mask, img_scale)
+        train_set=  BasicDataset(train_img, train_mask, img_scale)
+        val_set = BasicDataset(val_img, val_mask, img_scale)
 
     # 2. Split into train / validation partitions
-    n_val = int(len(dataset) * val_percent)
-    n_train = len(dataset) - n_val
-    train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
+    n_val =5
+    n_train = 5
+    # train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
@@ -74,7 +81,7 @@ def train_model(
     ''')
 
     # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
-    optimizer = optim.RMSprop(model.parameters(),
+    optimizer = optim.RMSprop(model.parameters(), 
                               lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
@@ -83,14 +90,14 @@ def train_model(
 
     # 5. Begin training
     for epoch in range(1, epochs + 1):
-        model.train()
+        model.train()   
         epoch_loss = 0
         with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
                 images, true_masks = batch['image'], batch['mask']
 
-                assert images.shape[1] == model.n_channels, \
-                    f'Network has been defined with {model.n_channels} input channels, ' \
+                assert images.shape[1] == model.in_channels, \
+                    f'Network has been defined with {model.in_channels} input channels, ' \
                     f'but loaded images have {images.shape[1]} channels. Please check that ' \
                     'the images are loaded correctly.'
 
@@ -111,7 +118,15 @@ def train_model(
                         )
 
                 optimizer.zero_grad(set_to_none=True)
+                for tag, value in model.named_parameters():
+                    if value.grad is not None:
+                        print(f'Before backward: {tag} grad exists')
+
                 grad_scaler.scale(loss).backward()
+                for name, param in model.named_parameters():
+                    if param.grad is None:
+                        print(f"WARNING: {name} grad is None!")
+
                 grad_scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clipping)
                 grad_scaler.step(optimizer)
@@ -133,6 +148,8 @@ def train_model(
                     if global_step % division_step == 0:
                         histograms = {}
                         for tag, value in model.named_parameters():
+                            if not value.requires_grad:
+                                 print(f'Warning: Parameter {tag} does not require gradients!')
                             tag = tag.replace('/', '.')
                             if not (torch.isinf(value) | torch.isnan(value)).any():
                                 histograms['Weights/' + tag] = wandb.Histogram(value.data.cpu())
@@ -162,7 +179,8 @@ def train_model(
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
             state_dict = model.state_dict()
-            state_dict['mask_values'] = dataset.mask_values
+            mask_values = train_set.mask_values
+            state_dict['mask_values'] = mask_values
             torch.save(state_dict, str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch)))
             logging.info(f'Checkpoint {epoch} saved!')
 
@@ -194,13 +212,23 @@ if __name__ == '__main__':
     # Change here to adapt to your data
     # n_channels=3 for RGB images
     # n_classes is the number of probabilities you want to get per pixel
-    model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    #model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    model=Vit_Unet(
+        in_channels=3,
+        encoder_channels=[64,128,256,512,1024],
+        decoder_channels=[512,256,128,64],
+        image_sizes=[256,128,64,32,16],
+        vit_dim=1024,
+        vit_depth=1,
+        vit_heads=16,
+        vit_mlp_dim=2048,
+        n_classes=2
+    )
     model = model.to(memory_format=torch.channels_last)
 
     logging.info(f'Network:\n'
-                 f'\t{model.n_channels} input channels\n'
-                 f'\t{model.n_classes} output channels (classes)\n'
-                 f'\t{"Bilinear" if model.bilinear else "Transposed conv"} upscaling')
+                 f'\t{model.in_channels} input channels\n'
+               )
 
     if args.load:
         state_dict = torch.load(args.load, map_location=device)

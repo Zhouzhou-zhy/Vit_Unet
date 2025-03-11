@@ -11,6 +11,9 @@ from os.path import splitext, isfile, join
 from pathlib import Path
 from torch.utils.data import Dataset
 from tqdm import tqdm
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
+
 
 
 def load_image(filename):
@@ -113,5 +116,5 @@ class BasicDataset(Dataset):
 
 
 class CarvanaDataset(BasicDataset):
-    def __init__(self, images_dir, mask_dir, scale=1):
+    def __init__(self, images_dir, mask_dir, scale=0.5):
         super().__init__(images_dir, mask_dir, scale, mask_suffix='_mask')
