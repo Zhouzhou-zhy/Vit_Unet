@@ -9,7 +9,8 @@ from PIL import Image
 from torchvision import transforms
 
 from utils.data_loading import BasicDataset
-from unet import UNet
+#from unet import UNet
+from vit_unet import Vit_Unet
 from utils.utils import plot_img_and_mask
 
 
@@ -162,7 +163,19 @@ if __name__ == "__main__":
     in_files = in_files[: args.max_images]  # 限制最多处理 args.max_images 张图像
     out_files = get_output_filenames(args)
 
-    net = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    #net = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    net=Vit_Unet(
+        in_channels=3,
+        encoder_channels=[64,128,256,512,1024],
+        decoder_channels=[512,256,128,64],
+        image_sizes=[256,128,64,32,16],
+        vit_dim=1024,
+        vit_depth=1,
+        vit_heads=16,
+        vit_mlp_dim=2048,
+        n_classes=2,
+    )
+    
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Loading model {args.model}")

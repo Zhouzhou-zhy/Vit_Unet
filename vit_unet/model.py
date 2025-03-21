@@ -146,8 +146,8 @@ if __name__ == "__main__":
         decoder_channels=[512,256,128,64],
         image_sizes=[256,128,64,32,16],
         vit_dim=1024,
-        vit_depth=1,
-        vit_heads=16,
+        vit_depth=6,
+        vit_heads=8,
         vit_mlp_dim=2048,
         n_classes=2
     ).to(device)
