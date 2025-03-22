@@ -15,7 +15,6 @@ from tqdm import tqdm
 from vit_unet import Vit_Unet
 import wandb
 from evaluate import evaluate
-
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
 import os
@@ -33,7 +32,7 @@ def train_model(
         device,
         epochs: int = 5,
         batch_size: int = 1,
-        learning_rate: float = 1e-2,
+        learning_rate: float = 1e-5,
         val_percent: float = 0.1,
         save_checkpoint: bool = True,
         img_scale: float = 0.5,
@@ -52,8 +51,8 @@ def train_model(
         val_set = BasicDataset(val_img, val_mask, img_scale)
 
     # 2. Split into train / validation partitions
-    n_val =5
-    n_train = 5
+    n_val =len(val_set)
+    n_train = len(train_set)
     # train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
     # 3. Create data loaders
@@ -96,8 +95,8 @@ def train_model(
             for batch in train_loader:
                 images, true_masks = batch['image'], batch['mask']
 
-                assert images.shape[1] == model.in_channels, \
-                    f'Network has been defined with {model.in_channels} input channels, ' \
+                assert images.shape[1] == model.n_channels, \
+                    f'Network has been defined with {model.n_channels} input channels, ' \
                     f'but loaded images have {images.shape[1]} channels. Please check that ' \
                     'the images are loaded correctly.'
 
@@ -189,7 +188,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
     parser.add_argument('--epochs', '-e', metavar='E', type=int, default=5, help='Number of epochs')
     parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=1, help='Batch size')
-    parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
+    parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-2,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
     parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
@@ -213,21 +212,11 @@ if __name__ == '__main__':
     # n_channels=3 for RGB images
     # n_classes is the number of probabilities you want to get per pixel
     #model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
-    model=Vit_Unet(
-        in_channels=3,
-        encoder_channels=[64,128,256,512,1024],
-        decoder_channels=[512,256,128,64],
-        image_sizes=[256,128,64,32,16],
-        vit_dim=1024,
-        vit_depth=1,
-        vit_heads=16,
-        vit_mlp_dim=2048,
-        n_classes=2
-    )
+    model=Vit_Unet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
     model = model.to(memory_format=torch.channels_last)
 
     logging.info(f'Network:\n'
-                 f'\t{model.in_channels} input channels\n'
+                 f'\t{model.n_channels} input channels\n'
                )
 
     if args.load:

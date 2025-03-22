@@ -165,17 +165,10 @@ if __name__ == "__main__":
 
     #net = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
     net=Vit_Unet(
-        in_channels=3,
-        encoder_channels=[64,128,256,512,1024],
-        decoder_channels=[512,256,128,64],
-        image_sizes=[256,128,64,32,16],
-        vit_dim=1024,
-        vit_depth=1,
-        vit_heads=16,
-        vit_mlp_dim=2048,
-        n_classes=2,
+        n_channels=3,
+        n_classes=args.classes,
+        
     )
-    
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Loading model {args.model}")

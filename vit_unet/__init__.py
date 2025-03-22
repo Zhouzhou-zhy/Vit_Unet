@@ -1,1 +1,1 @@
-from .model import Vit_Unet
+from .model2 import Vit_Unet

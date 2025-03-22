@@ -154,22 +154,18 @@ class ViT(nn.Module):
         x = self.upsample(x)
         return x
 
-
-# if __name__ == "__main__":
+if __name__ == "__main__":
  
-#     v = ViT(  # 图像大小
-#         image_size=256,
-#         patch_size=32, 
-#         in_channels=3,# patch大小（分块的大小） # imagenet数据集1000分类
-#         dim=1024,  # position embedding的维度
-#         depth=1,  # encoder和decoder中block层数是6
-#         heads=16,  # multi-head中head的数量为16
-#         mlp_dim=2048,
-#         dropout=0.1,  #
-#         emb_dropout=0.1,
-#     )
-
-#     img = torch.randn(1, 3, 256, 256)
-
-#     preds = v(img)  # (1, 1000)
-#     print(list(preds.shape))
+    model=ViT(
+            image_size=16,        # 假设输入特征图尺寸为16x16
+            patch_size=4,        # 将16x16分成4x4的patch
+            in_channels=1024,     # 与down4输出通道一致
+            dim=512,          # ViT隐层维度
+            depth=2,      # ViT层数
+            heads=8,      # 注意力头数
+            mlp_dim=512*4     # MLP扩展维度
+        )
+    img = torch.randn(1, 1024, 16, 16)
+    preds = model(img)  # (1, 1000)
+    print(list(preds.shape))
+    
