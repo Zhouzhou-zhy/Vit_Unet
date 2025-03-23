@@ -11,6 +11,7 @@ from os.path import splitext, isfile, join
 from pathlib import Path
 from torch.utils.data import Dataset
 from tqdm import tqdm
+import torchvision.transforms as transforms
 import torch.multiprocessing
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -39,12 +40,21 @@ def unique_mask_values(idx, mask_dir, mask_suffix):
 
 
 class BasicDataset(Dataset):
-    def __init__(self, images_dir: str, mask_dir: str, scale: float = 1.0, mask_suffix: str = ''):
+    def __init__(self, images_dir: str, mask_dir: str, scale: float = 1.0, mask_suffix: str = '',train: bool = True):
+        self.train = train
         self.images_dir = Path(images_dir)
         self.mask_dir = Path(mask_dir)
         assert 0 < scale <= 1, 'Scale must be between 0 and 1'
         self.scale = scale
         self.mask_suffix = mask_suffix
+        self.train_transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.3),
+            transforms.RandomRotation(degrees=15),
+            transforms.RandomApply([transforms.ElasticTransform(alpha=25.0)], p=0.2),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1),
+        ])
+        self.val_transform = transforms.Compose([])  # 验证集无增强
 
         self.ids = [splitext(file)[0] for file in listdir(images_dir) if isfile(join(images_dir, file)) and not file.startswith('.')]
         if not self.ids:
@@ -102,12 +112,23 @@ class BasicDataset(Dataset):
         assert len(mask_file) == 1, f'Either no mask or multiple masks found for the ID {name}: {mask_file}'
         mask = load_image(mask_file[0])
         img = load_image(img_file[0])
+       
 
         assert img.size == mask.size, \
             f'Image and mask {name} should be the same size, but are {img.size} and {mask.size}'
 
         img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
         mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
+        if self.train:
+            seed = torch.randint(0, 2**32, (1,)).item()
+            # 同步随机参数
+            torch.manual_seed(seed)
+            img = self.train_transform(img)
+            torch.manual_seed(seed)
+            mask = self.train_transform(mask)
+        else:
+            img = self.val_transform(img)
+            mask = self.val_transform(mask)
 
         return {
             'image': torch.as_tensor(img.copy()).float().contiguous(),

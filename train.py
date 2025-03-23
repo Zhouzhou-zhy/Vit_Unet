@@ -12,18 +12,15 @@ from pathlib import Path
 from torch import optim
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
-from vit_unet import Vit_Unet
+from unet import UNet
 import wandb
 from evaluate import evaluate
+from vit_unet import Vit_Unet
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
-import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
-train_img = Path('/home/zhy/zhy-cv/seg_test/The_cropped_image_tiles_and_raster_labels/train_test/')
-train_mask = Path('/home/zhy/zhy-cv/seg_test/The_cropped_image_tiles_and_raster_labels/train_mark/')
-val_img= Path('/home/zhy/zhy-cv/seg_test/The_cropped_image_tiles_and_raster_labels/val_test/')
-val_mask= Path('/home/zhy/zhy-cv/seg_test/The_cropped_image_tiles_and_raster_labels/val_mark/')
+dir_img = Path('/root/autodl-tmp/The_cropped_image_tiles_and_raster_labels/train/image')
+dir_mask = Path('/root/autodl-tmp/The_cropped_image_tiles_and_raster_labels/train/label')
 dir_checkpoint = Path('./checkpoints/')
 
 
@@ -41,22 +38,20 @@ def train_model(
         momentum: float = 0.999,
         gradient_clipping: float = 1.0,
 ):
-
     # 1. Create dataset
     try:
-        train_set= CarvanaDataset(train_img, train_mask, img_scale)
-        val_set =  CarvanaDataset(val_img, val_mask, img_scale)
+        dataset = CarvanaDataset(dir_img, dir_mask, img_scale)
     except (AssertionError, RuntimeError, IndexError):
-        train_set=  BasicDataset(train_img, train_mask, img_scale)
-        val_set = BasicDataset(val_img, val_mask, img_scale)
+        dataset = BasicDataset(dir_img, dir_mask, img_scale)
 
     # 2. Split into train / validation partitions
-    n_val =len(val_set)
-    n_train = len(train_set)
-    # train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
-
+    n_val = int(len(dataset) * val_percent)
+    n_train = len(dataset) - n_val
+    train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
+    train_set.dataset.train=True
+    val_set.dataset.train=False
     # 3. Create data loaders
-    loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
+    loader_args = dict(batch_size=batch_size, num_workers=32, pin_memory=False)
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
 
@@ -80,7 +75,7 @@ def train_model(
     ''')
 
     # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
-    optimizer = optim.RMSprop(model.parameters(), 
+    optimizer = optim.RMSprop(model.parameters(),
                               lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
@@ -89,7 +84,7 @@ def train_model(
 
     # 5. Begin training
     for epoch in range(1, epochs + 1):
-        model.train()   
+        model.train()
         epoch_loss = 0
         with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
@@ -105,27 +100,39 @@ def train_model(
 
                 with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
                     masks_pred = model(images)
+                    
+                    # 新增参数配置 (根据你的任务调整这些值)
+                    class_weights = torch.tensor([0.2, 0.8], device=device)  # 示例：二分类权重
+                    dice_kwargs = {
+                        'gamma': 1.5,             # 难例样本增强系数
+                        'boundary_weight': 0.3,    # 边界增强权重
+                        'multi_scale': True,       # 启用多尺度
+                        'class_weights': class_weights if model.n_classes == 1 else None
+                    }
+                    
                     if model.n_classes == 1:
+                        # 二分类任务
                         loss = criterion(masks_pred.squeeze(1), true_masks.float())
-                        loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
+                        loss += dice_loss(
+                            F.sigmoid(masks_pred.squeeze(1)), 
+                            true_masks.float(),
+                            multiclass=False,
+                            **dice_kwargs
+                        )
                     else:
+                        # 多分类任务
                         loss = criterion(masks_pred, true_masks)
+                        # 生成 one-hot 并调整权重
+                        dice_kwargs['class_weights'] = torch.tensor([0.1, 0.3, 0.6], device=device)  # 示例：3类权重
                         loss += dice_loss(
                             F.softmax(masks_pred, dim=1).float(),
                             F.one_hot(true_masks, model.n_classes).permute(0, 3, 1, 2).float(),
-                            multiclass=True
+                            multiclass=True,
+                            **dice_kwargs
                         )
 
                 optimizer.zero_grad(set_to_none=True)
-                for tag, value in model.named_parameters():
-                    if value.grad is not None:
-                        print(f'Before backward: {tag} grad exists')
-
                 grad_scaler.scale(loss).backward()
-                for name, param in model.named_parameters():
-                    if param.grad is None:
-                        print(f"WARNING: {name} grad is None!")
-
                 grad_scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clipping)
                 grad_scaler.step(optimizer)
@@ -147,8 +154,6 @@ def train_model(
                     if global_step % division_step == 0:
                         histograms = {}
                         for tag, value in model.named_parameters():
-                            if not value.requires_grad:
-                                 print(f'Warning: Parameter {tag} does not require gradients!')
                             tag = tag.replace('/', '.')
                             if not (torch.isinf(value) | torch.isnan(value)).any():
                                 histograms['Weights/' + tag] = wandb.Histogram(value.data.cpu())
@@ -178,17 +183,16 @@ def train_model(
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
             state_dict = model.state_dict()
-            mask_values = train_set.mask_values
-            state_dict['mask_values'] = mask_values
+            state_dict['mask_values'] = dataset.mask_values
             torch.save(state_dict, str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch)))
             logging.info(f'Checkpoint {epoch} saved!')
 
 
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
-    parser.add_argument('--epochs', '-e', metavar='E', type=int, default=5, help='Number of epochs')
-    parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=1, help='Batch size')
-    parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-2,
+    parser.add_argument('--epochs', '-e', metavar='E', type=int, default=50, help='Number of epochs')
+    parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=4, help='Batch size')
+    parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
     parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
@@ -196,7 +200,7 @@ def get_args():
                         help='Percent of the data that is used as validation (0-100)')
     parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
-    parser.add_argument('--classes', '-c', type=int, default=2, help='Number of classes')
+    parser.add_argument('--classes', '-c', type=int, default=1, help='Number of classes')
 
     return parser.parse_args()
 
@@ -211,13 +215,13 @@ if __name__ == '__main__':
     # Change here to adapt to your data
     # n_channels=3 for RGB images
     # n_classes is the number of probabilities you want to get per pixel
-    #model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
-    model=Vit_Unet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    model = Vit_Unet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
     model = model.to(memory_format=torch.channels_last)
 
     logging.info(f'Network:\n'
                  f'\t{model.n_channels} input channels\n'
-               )
+                 f'\t{model.n_classes} output channels (classes)\n'
+                 f'\t{"Bilinear" if model.bilinear else "Transposed conv"} upscaling')
 
     if args.load:
         state_dict = torch.load(args.load, map_location=device)

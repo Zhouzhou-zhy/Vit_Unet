@@ -1,6 +1,6 @@
 """ Full assembly of the parts to form the complete network """
 
-from unet_parts import *
+from .unet_parts import *
 
 
 class UNet(nn.Module):
@@ -25,7 +25,7 @@ class UNet(nn.Module):
 
     def forward(self, x):
         x1 = self.inc(x)
-        print(x1.shape)
+       
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
