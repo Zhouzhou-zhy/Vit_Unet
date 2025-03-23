@@ -24,7 +24,8 @@ class  Vit_Unet(nn.Module):
                 patch_h=4,
                 patch_w=4,
                 head_dim=1024 // vit_heads,  # 1024/8=128
-                conv_ksize=3
+                conv_ksize=3,
+                dropout=0.1
             )
         
         self.up1 = (Up(1024, 512 // factor, bilinear))

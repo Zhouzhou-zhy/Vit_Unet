@@ -77,7 +77,14 @@ def train_model(
     # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
     optimizer = optim.RMSprop(model.parameters(),
                               lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
+    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+    optimizer,
+    max_lr=1e-3,
+    total_steps=epochs * len(train_loader),
+    pct_start=0.3,
+    anneal_strategy='cos'
+)
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
     criterion = nn.CrossEntropyLoss() if model.n_classes > 1 else nn.BCEWithLogitsLoss()
     global_step = 0
@@ -100,35 +107,15 @@ def train_model(
 
                 with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
                     masks_pred = model(images)
-                    
-                    # 新增参数配置 (根据你的任务调整这些值)
-                    class_weights = torch.tensor([0.2, 0.8], device=device)  # 示例：二分类权重
-                    dice_kwargs = {
-                        'gamma': 1.5,             # 难例样本增强系数
-                        'boundary_weight': 0.3,    # 边界增强权重
-                        'multi_scale': True,       # 启用多尺度
-                        'class_weights': class_weights if model.n_classes == 1 else None
-                    }
-                    
                     if model.n_classes == 1:
-                        # 二分类任务
                         loss = criterion(masks_pred.squeeze(1), true_masks.float())
-                        loss += dice_loss(
-                            F.sigmoid(masks_pred.squeeze(1)), 
-                            true_masks.float(),
-                            multiclass=False,
-                            **dice_kwargs
-                        )
+                        loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
                     else:
-                        # 多分类任务
                         loss = criterion(masks_pred, true_masks)
-                        # 生成 one-hot 并调整权重
-                        dice_kwargs['class_weights'] = torch.tensor([0.1, 0.3, 0.6], device=device)  # 示例：3类权重
                         loss += dice_loss(
                             F.softmax(masks_pred, dim=1).float(),
                             F.one_hot(true_masks, model.n_classes).permute(0, 3, 1, 2).float(),
-                            multiclass=True,
-                            **dice_kwargs
+                            multiclass=True
                         )
 
                 optimizer.zero_grad(set_to_none=True)
@@ -200,7 +187,7 @@ def get_args():
                         help='Percent of the data that is used as validation (0-100)')
     parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
-    parser.add_argument('--classes', '-c', type=int, default=1, help='Number of classes')
+    parser.add_argument('--classes', '-c', type=int, default=2, help='Number of classes')
 
     return parser.parse_args()
 
