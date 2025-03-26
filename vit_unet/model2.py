@@ -1,9 +1,9 @@
 import torch.nn as nn
 from .unet_parts import *
-from .mobilevit import MobileViTBlock
-
+#from .mobilevit import MobileViTBlock
+from .VIT_model import ViT
 class  Vit_Unet(nn.Module):
-    def __init__(self, n_channels, n_classes, bilinear=False,vit_depth=6, vit_heads=8):
+    def __init__(self, n_channels, n_classes, bilinear=False,vit_dim=512,vit_depth=6, vit_heads=8):
         super(Vit_Unet, self).__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
@@ -16,17 +16,15 @@ class  Vit_Unet(nn.Module):
         self.down3 = (Down(256, 512))
         factor = 2 if bilinear else 1
         self.down4 = (Down(512, 1024 // factor))
-        self.mobilevit =  MobileViTBlock(
-                in_channels=1024,
-                transformer_dim=1024,
-                ffn_dim=4096,
-                n_transformer_blocks=vit_depth,
-                patch_h=4,
-                patch_w=4,
-                head_dim=1024 // vit_heads,  # 1024/8=128
-                conv_ksize=3,
-                dropout=0.1
-            )
+        self.vit = ViT(
+            image_size=16,        # 假设输入特征图尺寸为16x16
+            patch_size=4,        # 将16x16分成4x4的patch
+            in_channels=1024,     # 与down4输出通道一致
+            dim=vit_dim,          # ViT隐层维度
+            depth=vit_depth,      # ViT层数
+            heads=vit_heads,      # 注意力头数
+            mlp_dim=vit_dim*2     # MLP扩展维度
+        )
         
         self.up1 = (Up(1024, 512 // factor, bilinear))
         self.up2 = (Up(512, 256 // factor, bilinear))
@@ -40,7 +38,7 @@ class  Vit_Unet(nn.Module):
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        vit_out = self.mobilevit(x5)    
+        vit_out = self.vit(x5)    
         x = self.up1(vit_out, x4)
         x = self.up2(x, x3)
         x = self.up3(x, x2)

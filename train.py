@@ -21,7 +21,7 @@ from utils.dice_score import dice_loss
 
 dir_img = Path('/root/autodl-tmp/The_cropped_image_tiles_and_raster_labels/train/image')
 dir_mask = Path('/root/autodl-tmp/The_cropped_image_tiles_and_raster_labels/train/label')
-dir_checkpoint = Path('./checkpoints/')
+dir_checkpoint = Path('/root/autodl-tmp/checkpoint')
 
 
 def train_model(
@@ -77,14 +77,14 @@ def train_model(
     # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
     optimizer = optim.RMSprop(model.parameters(),
                               lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
-    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-    optimizer,
-    max_lr=1e-3,
-    total_steps=epochs * len(train_loader),
-    pct_start=0.3,
-    anneal_strategy='cos'
-)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
+#     scheduler = torch.optim.lr_scheduler.OneCycleLR(
+#     optimizer,
+#     max_lr=1e-3,
+#     total_steps=epochs * len(train_loader),
+#     pct_start=0.3,
+#     anneal_strategy='cos'
+# )
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
     criterion = nn.CrossEntropyLoss() if model.n_classes > 1 else nn.BCEWithLogitsLoss()
     global_step = 0
