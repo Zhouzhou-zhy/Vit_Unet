@@ -21,7 +21,7 @@ from utils.dice_score import dice_loss
 
 dir_img = Path('/root/autodl-tmp/The_cropped_image_tiles_and_raster_labels/train/image')
 dir_mask = Path('/root/autodl-tmp/The_cropped_image_tiles_and_raster_labels/train/label')
-dir_checkpoint = Path('./checkpoints/')
+dir_checkpoint = Path('/root/autodl-tmp/checkpoints')
 
 
 def train_model(
