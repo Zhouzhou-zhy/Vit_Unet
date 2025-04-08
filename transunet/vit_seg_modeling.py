@@ -16,8 +16,8 @@ import numpy as np
 from torch.nn import CrossEntropyLoss, Dropout, Softmax, Linear, Conv2d, LayerNorm
 from torch.nn.modules.utils import _pair
 from scipy import ndimage
-import vit_seg_configs as configs
-from vit_seg_modeling_resnet_skip import ResNetV2
+from . import vit_seg_configs as configs
+from .vit_seg_modeling_resnet_skip import ResNetV2
 
 
 logger = logging.getLogger(__name__)
@@ -368,8 +368,10 @@ class DecoderCup(nn.Module):
 
 
 class VisionTransformer(nn.Module):
-    def __init__(self, config, img_size=224, num_classes=21843, zero_head=False, vis=False):
+    def __init__(self, config, img_size=224, num_classes=21843, n_channels=3,zero_head=False, vis=False,bilinear=False):
         super(VisionTransformer, self).__init__()
+        self.bilinear = bilinear
+        self.n_channels = n_channels
         self.num_classes = num_classes
         self.zero_head = zero_head
         self.classifier = config.classifier

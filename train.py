@@ -18,6 +18,7 @@ from evaluate import evaluate
 from vit_unet import Vit_Unet
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
+from transunet.TransUnet import get_transNet
 
 dir_img = Path('/root/autodl-tmp/The_cropped_image_tiles_and_raster_labels/train/image')
 dir_mask = Path('/root/autodl-tmp/The_cropped_image_tiles_and_raster_labels/train/label')
@@ -86,7 +87,7 @@ def train_model(
     anneal_strategy='cos'
 )
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
-    criterion = nn.CrossEntropyLoss() if model.n_classes > 1 else nn.BCEWithLogitsLoss()
+    criterion = nn.CrossEntropyLoss() if model.num_classes > 1 else nn.BCEWithLogitsLoss()
     global_step = 0
 
     # 5. Begin training
@@ -107,14 +108,14 @@ def train_model(
 
                 with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
                     masks_pred = model(images)
-                    if model.n_classes == 1:
+                    if model.num_classes == 1:
                         loss = criterion(masks_pred.squeeze(1), true_masks.float())
                         loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
                     else:
                         loss = criterion(masks_pred, true_masks)
                         loss += dice_loss(
                             F.softmax(masks_pred, dim=1).float(),
-                            F.one_hot(true_masks, model.n_classes).permute(0, 3, 1, 2).float(),
+                            F.one_hot(true_masks, model.num_classes).permute(0, 3, 1, 2).float(),
                             multiclass=True
                         )
 
@@ -202,12 +203,13 @@ if __name__ == '__main__':
     # Change here to adapt to your data
     # n_channels=3 for RGB images
     # n_classes is the number of probabilities you want to get per pixel
-    model = Vit_Unet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    #model = Vit_Unet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    model=get_transNet(n_classes=args.classes)
     model = model.to(memory_format=torch.channels_last)
 
     logging.info(f'Network:\n'
                  f'\t{model.n_channels} input channels\n'
-                 f'\t{model.n_classes} output channels (classes)\n'
+                 f'\t{model.num_classes} output channels (classes)\n'
                  f'\t{"Bilinear" if model.bilinear else "Transposed conv"} upscaling')
 
     if args.load:
