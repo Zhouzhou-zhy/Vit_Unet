@@ -18,7 +18,7 @@ from evaluate import evaluate
 from vit_unet import Vit_Unet
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
-from mobilevit_deeplab import deeplabv3plus_mobilevit
+from mobilevit_deeplab import deeplabv3plus_mobilevit,deeplabv3_resnet50
 dir_img = Path('/root/autodl-tmp/03/train/image')
 dir_mask = Path('/root/autodl-tmp/03/train/label')
 dir_checkpoint = Path('/root/autodl-tmp/checkpoints')
@@ -182,7 +182,7 @@ def get_args():
     parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
                         help='Learning rate', dest='lr')
     parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
-    parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
+    parser.add_argument('--scale', '-s', type=float, default=1.0, help='Downscaling factor of the images')
     parser.add_argument('--validation', '-v', dest='val', type=float, default=10.0,
                         help='Percent of the data that is used as validation (0-100)')
     parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
@@ -203,7 +203,7 @@ if __name__ == '__main__':
     # n_channels=3 for RGB images
     # n_classes is the number of probabilities you want to get per pixel
     #model = Vit_Unet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
-    model = deeplabv3plus_mobilevit(num_classes=args.classes, pretrained_backbone=False)
+    model=deeplabv3plus_mobilevit(num_classes=args.classes, pretrained_backbone=False)
     model = model.to(memory_format=torch.channels_last)
 
     logging.info(f'Network:\n'

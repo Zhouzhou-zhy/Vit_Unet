@@ -2,6 +2,36 @@ from .utils import IntermediateLayerGetter
 from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabV3
 from .backbone.mobilevit_bone import MobileViTBackbone
 from .backbone.mobilevit import mobile_vit_small, mobile_vit_x_small, mobile_vit_xx_small
+from .backbone import (resnet,)
+
+def _segm_resnet(name, backbone_name, num_classes, output_stride, pretrained_backbone):
+
+    if output_stride==8:
+        replace_stride_with_dilation=[False, True, True]
+        aspp_dilate = [12, 24, 36]
+    else:
+        replace_stride_with_dilation=[False, False, True]
+        aspp_dilate = [6, 12, 18]
+
+    backbone = resnet.__dict__[backbone_name](
+        pretrained=pretrained_backbone,
+        replace_stride_with_dilation=replace_stride_with_dilation)
+    
+    inplanes = 2048
+    low_level_planes = 256
+
+    if name=='deeplabv3plus':
+        return_layers = {'layer4': 'out', 'layer1': 'low_level'}
+        classifier = DeepLabHeadV3Plus(inplanes, low_level_planes, num_classes, aspp_dilate)
+    elif name=='deeplabv3':
+        return_layers = {'layer4': 'out'}
+        classifier = DeepLabHead(inplanes , num_classes, aspp_dilate)
+    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
+
+    model = DeepLabV3(backbone, classifier,n_classes=num_classes,bilinear=False)
+    return model
+
+
 
 def _segm_mobilevit(name, backbone_name, num_classes, mobilevit_size,pretrained_backbone=False):
     if mobilevit_size == 'xx_small':
@@ -10,18 +40,29 @@ def _segm_mobilevit(name, backbone_name, num_classes, mobilevit_size,pretrained_
         backbone = MobileViTBackbone(mobile_vit_x_small(num_classes=num_classes))
     else:
         backbone = MobileViTBackbone(mobile_vit_small(num_classes=num_classes))
-    inplanes =  160  # 取决于你最后的通道数
+    inplanes =  640  # 取决于你最后的通道数
     low_level_planes = 64  # 取决于你 layer1 的输出通道数
 
     if name == 'deeplabv3plus':
-        return_layers = {'layer5': 'out', 'layer2': 'low_level'}
+        return_layers = {'conv_1x1_exp': 'out', 'layer2': 'low_level'}
         classifier = DeepLabHeadV3Plus(inplanes, low_level_planes, num_classes, [6, 12, 18])
     elif name == 'deeplabv3':
-        return_layers = {'layer5': 'out'}
+        return_layers = {'conv_1x1_exp': 'out'}
         classifier = DeepLabHead(inplanes, num_classes, [6, 12, 18])
     backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
     model = DeepLabV3(backbone, classifier,n_classes=num_classes,bilinear=False)
     return model
+
+def deeplabv3_resnet50(num_classes=8, output_stride=8, pretrained_backbone=False):
+    """Constructs a DeepLabV3 model with a ResNet-50 backbone.
+
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+    """
+    return _segm_resnet('deeplabv3plus', 'resnet50', num_classes, output_stride=output_stride, pretrained_backbone=pretrained_backbone)
+
 
 def deeplabv3plus_mobilevit(num_classes=8,  pretrained_backbone=False):
     """Constructs a DeepLabV3+ model with a mobilevit backbone.
