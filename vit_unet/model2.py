@@ -21,8 +21,8 @@ class  Vit_Unet(nn.Module):
             transformer_dim=base_cn*16,  # 与原设计保持比例
             ffn_dim=base_cn*16*4,  # 原4096=1024*4，保持比例系数
             n_transformer_blocks=vit_depth,
-            patch_h=4,
-            patch_w=4,
+            patch_h=16,
+            patch_w=16,
             head_dim=(base_cn*16) // vit_heads,  # 自动计算维度
             conv_ksize=3,
             dropout=0.1

@@ -1,0 +1,46 @@
+from .utils import IntermediateLayerGetter
+from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabV3
+from .backbone.mobilevit_bone import MobileViTBackbone
+from .backbone.mobilevit import mobile_vit_small, mobile_vit_x_small, mobile_vit_xx_small
+
+def _segm_mobilevit(name, backbone_name, num_classes, mobilevit_size,pretrained_backbone=False):
+    if mobilevit_size == 'xx_small':
+        backbone = MobileViTBackbone(mobile_vit_xx_small(num_classes=num_classes))
+    elif mobilevit_size == 'x_small':
+        backbone = MobileViTBackbone(mobile_vit_x_small(num_classes=num_classes))
+    else:
+        backbone = MobileViTBackbone(mobile_vit_small(num_classes=num_classes))
+    inplanes =  160  # 取决于你最后的通道数
+    low_level_planes = 64  # 取决于你 layer1 的输出通道数
+
+    if name == 'deeplabv3plus':
+        return_layers = {'layer5': 'out', 'layer2': 'low_level'}
+        classifier = DeepLabHeadV3Plus(inplanes, low_level_planes, num_classes, [6, 12, 18])
+    elif name == 'deeplabv3':
+        return_layers = {'layer5': 'out'}
+        classifier = DeepLabHead(inplanes, num_classes, [6, 12, 18])
+    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
+    model = DeepLabV3(backbone, classifier,n_classes=num_classes,bilinear=False)
+    return model
+
+def deeplabv3plus_mobilevit(num_classes=8,  pretrained_backbone=False):
+    """Constructs a DeepLabV3+ model with a mobilevit backbone.
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+    """
+    return _segm_mobilevit('deeplabv3plus', 'MobileViT_16', num_classes=8, mobilevit_size='',pretrained_backbone=pretrained_backbone)
+
+if __name__ == '__main__':
+    # 创建使用ResNet-101的DeepLabV3+模型
+    model = deeplabv3plus_mobilevit(num_classes=2, pretrained_backbone=False)
+    
+    # 测试前向传播
+    import torch
+    input_tensor = torch.randn(2, 3, 512, 512)  # (batch_size, channels, height, width)
+    output = model(input_tensor)
+    
+    #print(f"模型结构:\n{model}")
+   # print(f"输入形状: {input_tensor.shape}")
+    print(f"输出形状: {output.shape}")  # DeepLabV3+ 输出是字典格式
