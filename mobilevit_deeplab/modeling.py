@@ -1,8 +1,11 @@
-from .utils import IntermediateLayerGetter
-from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabV3
-from .backbone.mobilevit_bone import MobileViTBackbone
-from .backbone.mobilevit import mobile_vit_small, mobile_vit_x_small, mobile_vit_xx_small
-from .backbone import (resnet,)
+from utils import IntermediateLayerGetter
+from _deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabV3
+from backbone.mobilevit_bone import MobileViTBackbone
+from backbone.mobilevit import mobile_vit_small, mobile_vit_x_small, mobile_vit_xx_small
+from backbone.mvit_unet_backbone import MobileVitUnetBackbone
+from backbone import (resnet,)
+from backbone.mobilevit_unet import Vit_Unet
+
 
 def _segm_resnet(name, backbone_name, num_classes, output_stride, pretrained_backbone):
 
@@ -53,6 +56,17 @@ def _segm_mobilevit(name, backbone_name, num_classes, mobilevit_size,pretrained_
     model = DeepLabV3(backbone, classifier,n_classes=num_classes,bilinear=False)
     return model
 
+def _segm_mvit_unet( num_classes):
+    backbone=MobileVitUnetBackbone(Vit_Unet(n_channels=3, n_classes=num_classes, bilinear=False))
+    inplanes =  512  # 取决于你最后的通道数
+    low_level_planes = 128  # 取决于你 layer1 的输出通道数
+    return_layers = {'mobilevit': 'out', 'layer2': 'low_level'}
+    classifier = DeepLabHeadV3Plus(inplanes, low_level_planes, num_classes, [6, 12, 18])
+    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
+    model = DeepLabV3(backbone, classifier,n_classes=num_classes,bilinear=False)
+    return model
+
+
 def deeplabv3_resnet50(num_classes=8, output_stride=8, pretrained_backbone=False):
     """Constructs a DeepLabV3 model with a ResNet-50 backbone.
 
@@ -73,13 +87,22 @@ def deeplabv3plus_mobilevit(num_classes=8,  pretrained_backbone=False):
     """
     return _segm_mobilevit('deeplabv3plus', 'MobileViT_16', num_classes=8, mobilevit_size='',pretrained_backbone=pretrained_backbone)
 
+def deeplabv3plus_mvit_unet(num_classes=8):
+     """Constructs a DeepLabV3+ model with a mobilevit_unet backbone.
+    Args:
+        num_classes (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+    """
+     return _segm_mvit_unet(num_classes=num_classes)
+
 if __name__ == '__main__':
     # 创建使用ResNet-101的DeepLabV3+模型
-    model = deeplabv3plus_mobilevit(num_classes=2, pretrained_backbone=False)
+    model = deeplabv3plus_mvit_unet(num_classes=2)
     
     # 测试前向传播
     import torch
-    input_tensor = torch.randn(2, 3, 512, 512)  # (batch_size, channels, height, width)
+    input_tensor = torch.randn(2, 3, 256, 256)  # (batch_size, channels, height, width)
     output = model(input_tensor)
     
     #print(f"模型结构:\n{model}")
