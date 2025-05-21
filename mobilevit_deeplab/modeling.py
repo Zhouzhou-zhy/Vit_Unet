@@ -1,10 +1,10 @@
-from utils import IntermediateLayerGetter
-from _deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabV3
-from backbone.mobilevit_bone import MobileViTBackbone
-from backbone.mobilevit import mobile_vit_small, mobile_vit_x_small, mobile_vit_xx_small
-from backbone.mvit_unet_backbone import MobileVitUnetBackbone
-from backbone import (resnet,)
-from backbone.mobilevit_unet import Vit_Unet
+from .utils import IntermediateLayerGetter
+from ._deeplab import DeepLabHead, DeepLabHeadV3Plus, DeepLabV3
+from .backbone.mobilevit_bone import MobileViTBackbone
+from .backbone.mobilevit import mobile_vit_small, mobile_vit_x_small, mobile_vit_xx_small
+from .backbone.mvit_unet_backbone import MobileVitUnetBackbone
+from .backbone import (resnet,)
+from .backbone.mobilevit_unet import Vit_Unet
 
 
 def _segm_resnet(name, backbone_name, num_classes, output_stride, pretrained_backbone):
@@ -75,7 +75,7 @@ def deeplabv3_resnet50(num_classes=8, output_stride=8, pretrained_backbone=False
         output_stride (int): output stride for deeplab.
         pretrained_backbone (bool): If True, use the pretrained backbone.
     """
-    return _segm_resnet('deeplabv3plus', 'resnet50', num_classes, output_stride=output_stride, pretrained_backbone=pretrained_backbone)
+    return _segm_resnet('deeplabv3plus', 'resnet101', num_classes, output_stride=output_stride, pretrained_backbone=pretrained_backbone)
 
 
 def deeplabv3plus_mobilevit(num_classes=8,  pretrained_backbone=False):

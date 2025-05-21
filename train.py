@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 from unet import UNet
 import wandb
-from evaluate import evaluate
+from evaluate import evaluate,compute_miou
 from vit_unet import Vit_Unet
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
@@ -147,7 +147,7 @@ def train_model(
                             if not (torch.isinf(value.grad) | torch.isnan(value.grad)).any():
                                 histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
 
-                        val_score = evaluate(model, val_loader, device, amp)
+                        val_score = compute_miou(model, val_loader, device, model.n_classes,amp)
                         scheduler.step(val_score)
 
                         logging.info('Validation Dice score: {}'.format(val_score))

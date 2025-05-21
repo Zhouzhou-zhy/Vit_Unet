@@ -22,17 +22,16 @@ class MobileVitUnetBackbone(nn.Module):
 
     def forward(self, x):
         # 前向传播获取多级特征
-        x = self.stem(x)       # [B, 16, 112, 112]
-        x = self.layer1(x)    # [B, 32, 56, 56]
-        x = self.layer2(x)   # [B, 64, 28, 28]
-        x = self.layer3(x)   # [B, 128, 14, 14]
+        x = self.stem(x)      
+        x = self.layer1(x)   
+        x = self.layer2(x)   
+        x = self.layer3(x)   
         x = self.layer4(x)
         x=self.mobilevit(x)
-        # [B, 256, 7, 7]
-        x = self.layer5(x)   # [B, 512, 7, 7]
-        x = self.layer6(x)   # [B, 256, 14, 14]
-        x = self.layer7(x)   # [B, 128, 28, 28]
-        x = self.layer8(x)   # [B, 64, 56, 56]
+        x = self.layer5(x)  
+        x = self.layer6(x)   
+        x = self.layer7(x)   
+        x = self.layer8(x)   
         x=self.layer9(x)
         # 返回高层和低层特征
         return x

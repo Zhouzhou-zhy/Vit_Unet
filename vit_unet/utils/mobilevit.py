@@ -198,6 +198,32 @@ class InvertedResidual(nn.Module):
             return self.block(x)
 
 
+class ASSA(nn.Module):
+    def __init__(self, in_channels: int, kernel_size: int = 3):
+        super(ASSA, self).__init__()
+
+        # 空间注意力：使用卷积来提取空间特征
+        self.spatial_attention = nn.Conv2d(in_channels, in_channels, kernel_size=kernel_size, padding=kernel_size // 2, groups=in_channels, bias=False)
+
+        # 语义注意力：使用1x1卷积提取语义特征
+        self.semantic_attention = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0),
+            nn.SiLU(),
+            nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=0)
+        )
+    def forward(self, x: Tensor) -> Tensor:
+        # 计算空间注意力
+        spatial_attn = self.spatial_attention(x)
+        spatial_attn = torch.sigmoid(spatial_attn)
+
+        # 计算语义注意力
+        semantic_attn = self.semantic_attention(x)
+        semantic_attn = torch.sigmoid(semantic_attn)
+
+        # 合成空间和语义注意力
+        return x * spatial_attn * semantic_attn
+
+
 class MobileViTBlock(nn.Module):
     """
     This class defines the `MobileViT block <https://arxiv.org/abs/2110.02178?context=cs.LG>`_
@@ -285,6 +311,7 @@ class MobileViTBlock(nn.Module):
         ]
         global_rep.append(nn.LayerNorm(transformer_dim))
         self.global_rep = nn.Sequential(*global_rep)
+        self.assa = ASSA(in_channels=transformer_dim)
 
         self.conv_proj = conv_1x1_out
         self.fusion = conv_3x3_out
