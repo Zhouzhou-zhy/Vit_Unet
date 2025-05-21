@@ -12,7 +12,7 @@ from utils.data_loading import BasicDataset
 from unet import UNet
 from vit_unet import Vit_Unet
 from utils.utils import plot_img_and_mask
-
+from mobilevit_deeplab.modeling import deeplabv3plus_mvit_unet,deeplabv3_resnet50
 
 def predict_img(net, full_img, device, scale_factor=1, out_threshold=0.5):
     net.eval()
@@ -82,7 +82,7 @@ def get_args():
         "--bilinear", action="store_true", default=False, help="Use bilinear upsampling"
     )
     parser.add_argument(
-        "--classes", "-c", type=int, default=2, help="Number of classes"
+        "--classes", "-c", type=int, default=3, help="Number of classes"
     )
     parser.add_argument(
         "--max-images",
@@ -91,7 +91,15 @@ def get_args():
         help="Maximum number of images to process and display",
     )
     return parser.parse_args()
-
+colors = [
+        (255, 255, 255),        # 类别0 - 白色
+        (255, 0, 0),      # 类别1 - 红色
+        (0, 255,0),      # 类别2 - 绿色
+        (255, 255, 0),      # 类别3 - 蓝色
+        (0, 0, 255),    # 类别4 - 黄色
+        (255, 69, 0),    # 类别5 - 紫红
+        (128, 0, 128),    # 类别6 - 红色
+    ]
 
 def get_output_filenames(args):
     def _generate_name(fn):
@@ -100,55 +108,34 @@ def get_output_filenames(args):
     return args.output or list(map(_generate_name, args.input))
 
 
-def mask_to_image(mask: np.ndarray, mask_values):
-    if isinstance(mask_values[0], list):
-        out = np.zeros(
-            (mask.shape[-2], mask.shape[-1], len(mask_values[0])), dtype=np.uint8
-        )
-    elif mask_values == [0, 1]:
-        out = np.zeros((mask.shape[-2], mask.shape[-1]), dtype=bool)
-    else:
-        out = np.zeros((mask.shape[-2], mask.shape[-1]), dtype=np.uint8)
+def mask_to_color_image(mask: np.ndarray):
+    # 自定义每个类别的颜色（0~6）
+    
+    h, w = mask.shape
+    color_mask = np.zeros((h, w, 3), dtype=np.uint8)
 
-    if mask.ndim == 3:
-        mask = np.argmax(mask, axis=0)
+    for i, color in enumerate(colors):
+        color_mask[mask == i] = color
 
-    for i, v in enumerate(mask_values):
-        out[mask == i] = v
-
-    return Image.fromarray(out)
+    return Image.fromarray(color_mask)
 
 
-def overlay_mask(image, mask, color=(255, 0, 0), alpha=0.5):
-    """
-    将掩码以指定颜色和透明度叠加到原图上
-    Args:
-    image (PIL.Image): 原始图像（RGB模式）
-    mask (np.ndarray): 预测的掩码（0-1二值或多类索引）
-    color (tuple/str): 掩码颜色，如 (255,0,0) 或 "red"
-    alpha (float): 透明度 (0~1)
-    Returns:
-    PIL.Image: 叠加后的图像
-    """
-    # 将原图转换为RGBA模式以便添加透明度
-    overlay = image.convert("RGBA")
 
-    # 创建颜色层
-    color_layer = Image.new("RGBA", overlay.size, color=color)
+def overlay_multiclass_mask(image, mask, colors, alpha=0.5):
+    """将多分类掩码叠加到图像上"""
+    image = image.convert("RGBA")
+    overlay = image.copy()
 
-    # 根据掩码生成透明度层：掩码区域为alpha，其他区域为0
-    if mask.ndim == 2:  # 二值掩码
-        mask_array = (mask > 0).astype(np.uint8) * int(255 * alpha)
-    else:  # 多分类掩码（假设mask为类别索引）
-        mask_array = (mask == 2 ).astype(np.uint8) * int(255 * alpha)
+    for class_idx, color in enumerate(colors):
+        if class_idx == 0:
+            continue  # 跳过背景
+        binary_mask = (mask == class_idx).astype(np.uint8) * int(255 * alpha)
+        mask_image = Image.fromarray(binary_mask, mode="L")
+        color_layer = Image.new("RGBA", image.size, color=color)
+        overlay = Image.composite(color_layer, overlay, mask_image)
 
-    mask_image = Image.fromarray(mask_array, mode="L")
-
-    # 将颜色层与原图混合
-    overlay = Image.composite(color_layer, overlay, mask_image)
-
-    # 合并图层并转换回RGB模式
     return overlay.convert("RGB")
+
 
 
 if __name__ == "__main__":
@@ -164,12 +151,14 @@ if __name__ == "__main__":
     out_files = get_output_filenames(args)
 
     #net = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
-    net=Vit_Unet(
-        n_channels=3,
-        n_classes=3,
+    # net=Vit_Unet(
+    #     n_channels=3,
+    #     n_classes=3,
         
-    )
-   
+    # )
+    #net = UNet(n_channels=3, n_classes=256, bilinear=False)
+    #net=deeplabv3plus_mvit_unet(num_classes=args.classes)
+    net=deeplabv3plus_mvit_unet(num_classes=args.classes)
    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"Loading model {args.model}")
@@ -177,7 +166,7 @@ if __name__ == "__main__":
 
     net.to(device=device)
     state_dict = torch.load(args.model, map_location=device)
-    mask_values = state_dict.pop("mask_values", [0, 1])
+    mask_values = state_dict.pop("mask_values", list(range(args.classes)))
     net.load_state_dict(state_dict)
 
     logging.info("Model loaded!")
@@ -202,9 +191,8 @@ if __name__ == "__main__":
                 out_threshold=args.mask_threshold,
                 device=device,
             )
-            unique_classes = np.unique(mask)
-            print(f"图像中包含的类别值: {unique_classes.tolist()}")
-            result = overlay_mask(img, mask, color="red", alpha=1)
+
+            result = overlay_multiclass_mask(img, mask, colors=colors, alpha=0.5)
 
             axes[i].imshow(result)
             axes[i].set_title("test")  # 显示文件名作为标题
@@ -212,7 +200,7 @@ if __name__ == "__main__":
 
             if not args.no_save:
                 out_filename = out_files[i]
-                result = mask_to_image(mask, mask_values)
+                result = mask_to_color_image(mask)
                 result.save(out_filename)
                 logging.info(f"Mask saved to {out_filename}")
 
