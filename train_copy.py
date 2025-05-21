@@ -19,7 +19,7 @@ warnings.filterwarnings('ignore')
 torch.backends.cudnn.enabled = True
  
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu' 
-n_classes = 9
+n_classes = 8
  
  
 class JointLoss(nn.Module):
