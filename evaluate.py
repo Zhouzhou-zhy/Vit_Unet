@@ -11,6 +11,7 @@ def compute_miou(net, dataloader, device, num_classes, amp):
     net.eval()
     num_val_batches = len(dataloader)
     miou= 0
+    confusion_matrix = torch.zeros((num_classes, num_classes), dtype=torch.int64, device=device)
     with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
         for batch in tqdm(dataloader, total=num_val_batches, desc='Validation round', unit='batch', leave=False):
             image, mask_true = batch['image'], batch['mask']

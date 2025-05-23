@@ -24,13 +24,22 @@ class DeepLabV3(_SimpleSegmentationModel):
         aux_classifier (nn.Module, optional): auxiliary classifier used during training
     """
     
-    # def __init__(self, n_classes,n_channels=3,billinear=False):
-    #     self.n_channels = n_channels
+    # def __init__(self, backbone, classifier, n_classes,bilinear=False, aux_classifier=None):
+    #     super().__init__()
+    #     self.backbone = backbone
+    #     self.classifier = classifier
+    #     self.aux_classifier = aux_classifier
     #     self.n_classes = n_classes
-    #     self.billinear = billinear
-    #     super(DeepLabV3, self).__init__()
-    pass
+    #     self.bilinear = bilinear
+    #     self.n_channels = 3
 
+    # def forward(self, x):
+    #     input_shape = x.shape[-2:]  # H, W
+    #     features = self.backbone(x)  # 是一个字典 {'out': ..., 'low_level': ...}
+    #     x = self.classifier(features)
+    #     x = F.interpolate(x, size=input_shape, mode='bilinear', align_corners=False)
+    #     return x
+    pass
 class DeepLabHeadV3Plus(nn.Module):
     def __init__(self, in_channels, low_level_channels, num_classes, aspp_dilate=[12, 24, 36]):
         super(DeepLabHeadV3Plus, self).__init__()

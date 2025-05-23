@@ -81,7 +81,6 @@ class IntermediateLayerGetter(nn.ModuleDict):
                     x.append(module(x[-1]))
             else: # other models (ex:resnet,mobilenet) are convolutions in series.
                 x = module(x)
-
             if name in self.return_layers:
                 out_name = self.return_layers[name]
                 if name == 'stage4' and self.hrnet_flag: # In HRNetV2, we upsample and concat all outputs streams together
