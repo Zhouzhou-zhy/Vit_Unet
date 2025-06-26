@@ -59,10 +59,10 @@ def _segm_mobilevit(name, backbone_name, num_classes, mobilevit_size,pretrained_
 def _segm_mvit_unet( num_classes):
     backbone=MobileVitUnetBackbone(Vit_Unet(n_channels=3, n_classes=num_classes, bilinear=False))
     inplanes =  512  # 取决于你最后的通道数
-    low_level_planes = 128  # 取决于你 layer1 的输出通道数
-    return_layers = {'mobilevit': 'out', 'layer2': 'low_level'}
+    low_level_planes = 64  # 取决于你 layer1 的输出通道数
+    return_layers = {'mobilevit': 'out', 'layer7': 'low_level'}
     classifier = DeepLabHeadV3Plus(inplanes, low_level_planes, num_classes, [6, 12, 18])
-    backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
+    #backbone = IntermediateLayerGetter(backbone, return_layers=return_layers)
     model = DeepLabV3(backbone, classifier,n_classes=num_classes,bilinear=False)
     return model
 

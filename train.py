@@ -19,8 +19,8 @@ from vit_unet import Vit_Unet
 from utils.data_loading import BasicDataset, CarvanaDataset
 from utils.dice_score import dice_loss
 from mobilevit_deeplab.modeling import deeplabv3plus_mvit_unet
-dir_img = Path('/root/autodl-tmp/03/train/images')
-dir_mask = Path('/root/autodl-tmp/03/train/labels')
+dir_img = Path('/root/autodl-tmp/data/img_dir/train')
+dir_mask = Path('/root/autodl-tmp/data/ann_dir/train')
 dir_checkpoint = Path('/root/autodl-tmp/checkpoints')
 
 
@@ -56,7 +56,7 @@ def train_model(
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
 
     # (Initialize logging)
-    experiment = wandb.init(project='U-Net', resume='allow', anonymous='must')
+    experiment = wandb.init(project='U-Net', resume='allow', mode="offline",anonymous='must')
     experiment.config.update(
         dict(epochs=epochs, batch_size=batch_size, learning_rate=learning_rate,
              val_percent=val_percent, save_checkpoint=save_checkpoint, img_scale=img_scale, amp=amp)
@@ -75,15 +75,15 @@ def train_model(
     ''')
 
     # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
-    optimizer = optim.RMSprop(model.parameters(),
-                              lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
-#     optimizer = torch.optim.AdamW(
-#     model.parameters(),
-#     lr=learning_rate,          # 建议初始学习率1e-4~3e-4
-#     weight_decay=0.01,  # 推荐值0.01~0.05（AdamW需更高权重衰减）
-#     betas=(0.9, 0.999),        # 保持默认动量参数
-#     eps=1e-8                    # 数值稳定性系数
-# )
+    # optimizer = optim.RMSprop(model.parameters(),
+    #                           lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
+    optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=learning_rate,          # 建议初始学习率1e-4~3e-4
+    weight_decay=0.05,  # 推荐值0.01~0.05（AdamW需更高权重衰减）
+    betas=(0.9, 0.999),        # 保持默认动量参数
+    eps=1e-8                    # 数值稳定性系数
+)
     #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)  # goal: maximize Dice score
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
     optimizer,

@@ -17,7 +17,7 @@ class MobileVitUnetBackbone(nn.Module):
         self.layer5=mobilevit_model.up1
         self.layer6=mobilevit_model.up2
         self.layer7=mobilevit_model.up3
-        #self.layer8=mobilevit_model.up4
+        #sself.layer8=mobilevit_model.up4
         #self.layer9=mobilevit_model.outc
 
     def forward(self, x):
@@ -31,7 +31,7 @@ class MobileVitUnetBackbone(nn.Module):
         x6 = self.layer5(vit_out,x4)  
         x7 = self.layer6(x6,x3)   
         x8 = self.layer7(x7,x2)   
-        # x9 = self.layer8(x8,x1)   
+       # x9 = self.layer8(x8,x1)   
         # out=self.layer9(x9)
         # 返回高层和低层特征
         return {
